@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "openai-web-mcp",
+  "main": "src/index.ts",
+  "preview_urls": false,
+  "compatibility_date": "2026-10-12",
+  // global_fetch_strictly_public: fetch() refuses private/internal addresses (SSRF defence in
+  // depth for web_fetch's direct fallback) and enables OAuth client-ID metadata documents.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "vars": {
+    "PUBLIC_ORIGIN": "https://openai-web-mcp.gmathur1993.workers.dev",
+    // Hard cap on upstream alpha/search calls per UTC day (search + fetch combined).
+    "DAILY_LIMIT": "400",
+    // Model id sent with alpha/search; required by the endpoint, not validated by it.
+    "CODEX_MODEL": "gpt-5.4-mini",
+    // Optional search localisation (strong effect, verified live). Unset/empty = global.
+    "SEARCH_COUNTRY": "IN",
+    "SEARCH_CITY": "",
+    "SEARCH_TIMEZONE": "Asia/Kolkata",
+    // Optional comma-separated hostnames never returned by web_search.
+    "BLOCKED_DOMAINS": "",
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "VAULT", "class_name": "TokenVault" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TokenVault"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "openai-web-mcp",
+      // Replace after `wrangler d1 create openai-web-mcp`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "kv_namespaces": [
+    // Replace after `wrangler kv namespace create OAUTH_KV`.
+    { "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" },
+  ],
+  "triggers": { "crons": ["17 3 * * *"] },
+  "observability": { "enabled": true },
+}

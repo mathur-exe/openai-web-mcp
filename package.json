@@ -1,0 +1,32 @@
+{
+  "name": "openai-web-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local-protocol https",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "WRANGLER_LOG_PATH=.wrangler/logs WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --outdir dist",
+    "db:local": "WRANGLER_LOG_PATH=.wrangler/logs wrangler d1 migrations apply openai-web-mcp --local",
+    "deploy": "wrangler deploy",
+    "pretest": "npm run build",
+    "reachability": "wrangler dev --remote --config reachability/wrangler.jsonc --port 8799"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^1.2.3",
+    "@modelcontextprotocol/server": "^2.3.1",
+    "agents": "^0.28.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261018.1",
+    "miniflare": "^5.20261012.1-beta",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.151.1"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

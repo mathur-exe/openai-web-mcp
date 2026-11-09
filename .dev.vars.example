@@ -1,0 +1,6 @@
+# Copy to .dev.vars for local development. Never commit real credentials.
+# Random passphrase of 32+ characters: unlocks MCP consent and /admin (Basic auth, user "owner").
+OWNER_PASSPHRASE=
+
+# Override the deployed issuer while developing locally.
+PUBLIC_ORIGIN=https://localhost:8787

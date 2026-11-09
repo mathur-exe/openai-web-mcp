@@ -1,0 +1,7 @@
+{
+  // Throwaway, binding-free probe. Run with `npm run reachability` (wrangler dev --remote):
+  // executes on Cloudflare's edge so the egress is real, but nothing is deployed.
+  "name": "openai-web-reachability",
+  "main": "probe.ts",
+  "compatibility_date": "2026-10-12",
+}
