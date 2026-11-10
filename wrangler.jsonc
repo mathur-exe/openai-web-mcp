@@ -31,14 +31,12 @@
     {
       "binding": "DB",
       "database_name": "openai-web-mcp",
-      // Replace after `wrangler d1 create openai-web-mcp`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "85eb6e11-cd13-433a-842a-250a44141f57",
       "migrations_dir": "migrations",
     },
   ],
   "kv_namespaces": [
-    // Replace after `wrangler kv namespace create OAUTH_KV`.
-    { "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" },
+    { "binding": "OAUTH_KV", "id": "1151c4ea20754c1da077c35671597bfb" },
   ],
   "triggers": { "crons": ["17 3 * * *"] },
   "observability": { "enabled": true },

@@ -18,6 +18,8 @@ src/service.ts  search/fetch orchestration, daily cap, 401→refresh→retry onc
 src/url.ts      SSRF guard for user-supplied URLs
 src/admin.ts    owner pages: ChatGPT sign-in, status, /admin/reachability
 reachability/   throwaway, binding-free probe worker (`npm run reachability`)
+relay/          dependency-free egress relay for Render (POST /alpha/search only, shared secret)
+scripts/smoke.mjs  live OAuth + MCP check against the deployed Worker (`--live` adds a search and a fetch)
 ```
 
 ## Login lifecycle (how ChatGPT login expiry is handled)
@@ -162,9 +164,9 @@ The integration tests run the built Worker in miniflare against a fake OpenAI (d
 | Login attempt limits | consent 10/h/IP; admin failures 20/h/IP | Brute-force protection. |
 | MCP OAuth tokens | access 1 h, refresh 30 days (idle 30 days) | Clients re-authorise monthly if unused. |
 
-## Status: Cloudflare-only does not work (2026-11-10)
+## Status
 
-`npm run reachability` showed that **chatgpt.com blocks Cloudflare Workers' egress IPs** (HTTP 403 HTML "Unable to load site" in 8 ms, while the same request from a normal network gets a JSON 401). `auth.openai.com` is reachable, so login and refresh work, but `alpha/search` cannot be called from a Worker. The Worker is therefore **not deployed**. The search call needs to leave from a different network, e.g. a small free Render relay (see the findings doc, §12).
+Deployed 2026-11-10; see [DEPLOYMENT.md](DEPLOYMENT.md). chatgpt.com blocks Cloudflare Workers' egress IPs (findings §12), so the Worker sends its one `alpha/search` call through a stateless relay on Render's free plan (`relay/`, findings §14). Login, token storage, OAuth and the tools all stay on Cloudflare.
 
 ## Known limits
 
