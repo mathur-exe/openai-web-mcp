@@ -16,6 +16,9 @@ async function probe(name: string, url: string, init: RequestInit) {
       cf_mitigated: response.headers.get("cf-mitigated"),
       challenged: isChallenge(response, body),
       body_head: body.replace(/\s+/g, " ").slice(0, 160),
+      body_text: body.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400),
+      server: response.headers.get("server"),
+      cf_ray: response.headers.get("cf-ray"),
     };
   } catch (error) {
     return { name, error: String(error), ms: Date.now() - started };
@@ -33,7 +36,11 @@ export default {
       await probe("device_usercode_endpoint_get", "https://auth.openai.com/api/accounts/deviceauth/usercode", { method: "GET" }),
       await probe("auth_openid_configuration", "https://auth.openai.com/.well-known/openid-configuration", { method: "GET" }),
     ];
-    const reachable = checks.every((c) => "status" in c && !c.challenged);
+    // Reaching OpenAI's API means a JSON answer (401 without a token); an HTML page is Cloudflare, not OpenAI.
+    const api = checks[0];
+    const reachable =
+      checks.every((c) => "status" in c && !c.challenged) &&
+      "content_type" in api && /json/i.test(api.content_type ?? "") && [200, 400, 401, 405, 422].includes(api.status as number);
     const cf = (request as Request & { cf?: { colo?: string } }).cf;
     return Response.json({ verdict: reachable ? "REACHABLE" : "BLOCKED_OR_ERROR", colo: cf?.colo ?? null, checks });
   },

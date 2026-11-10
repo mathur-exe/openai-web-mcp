@@ -119,12 +119,14 @@ export async function alphaSearch(
   }
 }
 
+/**
+ * True when Cloudflare (not OpenAI's API) answered: a challenge, or an HTML block page where JSON is
+ * expected. Observed 2026-11-10: Worker egress to chatgpt.com gets HTTP 403 HTML "Unable to load site".
+ */
 export function isChallenge(response: Response, body: string) {
-  return (
-    response.headers.get("cf-mitigated") === "challenge" ||
-    (/text\/html/i.test(response.headers.get("content-type") ?? "") &&
-      /just a moment|challenge-platform|cf-chl/i.test(body))
-  );
+  if (response.headers.get("cf-mitigated") === "challenge") return true;
+  const html = /text\/html/i.test(response.headers.get("content-type") ?? "");
+  return html && response.status >= 400 && /just a moment|challenge-platform|cf-chl|unable to load site|ray id/i.test(body);
 }
 
 function errorSummary(body: string) {

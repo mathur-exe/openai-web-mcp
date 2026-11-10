@@ -99,6 +99,8 @@ it("isChallenge detects Cloudflare challenge pages, not API errors", () => {
   expect(isChallenge(html, "<title>Just a moment...</title>")).toBe(true);
   expect(isChallenge(mitigated, "")).toBe(true);
   expect(isChallenge(api, '{"detail":"Unauthorized"}')).toBe(false);
+  const blockPage = new Response("", { status: 403, headers: { "content-type": "text/html; charset=UTF-8" } });
+  expect(isChallenge(blockPage, "Unable to load site Please try again later. [IP:2a06::103 | Ray ID:a5835b28ff118542]")).toBe(true);
 });
 
 describe("assertPublicUrl", () => {

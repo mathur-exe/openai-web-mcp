@@ -162,6 +162,10 @@ The integration tests run the built Worker in miniflare against a fake OpenAI (d
 | Login attempt limits | consent 10/h/IP; admin failures 20/h/IP | Brute-force protection. |
 | MCP OAuth tokens | access 1 h, refresh 30 days (idle 30 days) | Clients re-authorise monthly if unused. |
 
+## Status: Cloudflare-only does not work (2026-11-10)
+
+`npm run reachability` showed that **chatgpt.com blocks Cloudflare Workers' egress IPs** (HTTP 403 HTML "Unable to load site" in 8 ms, while the same request from a normal network gets a JSON 401). `auth.openai.com` is reachable, so login and refresh work, but `alpha/search` cannot be called from a Worker. The Worker is therefore **not deployed**. The search call needs to leave from a different network, e.g. a small free Render relay (see the findings doc, §12).
+
 ## Known limits
 
 - `alpha/search` is undocumented and unversioned, and OpenAI can change or remove it.
