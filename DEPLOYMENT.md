@@ -31,12 +31,12 @@ No paid plan was enabled on Cloudflare or Render.
 - 39 Worker tests and 4 relay tests pass; dry-run build 278 KB gzipped.
 - `node scripts/smoke.mjs`: OAuth discovery, DCR, owner consent, PKCE, protected MCP, four-tool discovery, `web_status`, live OAuth refresh. All pass.
 - Render `/probe`: REACHABLE (JSON 401 from chatgpt.com).
-- `node scripts/smoke.mjs --live` (needs the ChatGPT sign-in below): one search and one page fetch through the relay. **Not yet run.**
+- `node scripts/smoke.mjs --live` (2026-11-10, after the owner's ChatGPT sign-in, plan `free`): live `web_search` returned 3 results and `web_fetch` read a page via `openai-codex` through the Render relay. Pass.
 
 ## Owner steps remaining
 
-1. Open `/admin`, log in as user `owner` with the passphrase, and click **Sign in with ChatGPT**; enter the code at `auth.openai.com/codex/device`. (Or ask Claude to call `chatgpt_login` once connected.)
-2. Run `node scripts/smoke.mjs --live`.
+1. ~~Sign in to ChatGPT at `/admin`~~ (done 2026-11-10).
+2. ~~Run `node scripts/smoke.mjs --live`~~ (passes).
 3. Connect Claude: `claude mcp add --transport http openai-web https://openai-web-mcp.gmathur1993.workers.dev/mcp`, then deny the built-in `WebSearch` / `WebFetch` in `~/.claude/settings.json`.
 
 ## Notes
