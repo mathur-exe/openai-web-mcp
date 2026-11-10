@@ -34,6 +34,11 @@ export default {
         body: JSON.stringify({ id: crypto.randomUUID(), model: "gpt-5.4-mini", commands: { search_query: [{ q: "ping" }] } }),
       }),
       await probe("device_usercode_endpoint_get", "https://auth.openai.com/api/accounts/deviceauth/usercode", { method: "GET" }),
+      await probe("api_openai_com_responses_unauthenticated", "https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-5-mini", input: "ping" }),
+      }),
       await probe("auth_openid_configuration", "https://auth.openai.com/.well-known/openid-configuration", { method: "GET" }),
     ];
     // Reaching OpenAI's API means a JSON answer (401 without a token); an HTML page is Cloudflare, not OpenAI.
