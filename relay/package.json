@@ -1,0 +1,9 @@
+{
+  "name": "openai-web-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Stateless egress relay: forwards one POST (alpha/search) to chatgpt.com from a network it does not block.",
+  "scripts": { "start": "node server.mjs", "test": "node --test test/*.test.mjs" },
+  "engines": { "node": ">=20" }
+}
