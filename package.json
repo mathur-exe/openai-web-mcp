@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler dev --local-protocol https",
     "check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run test/",
     "build": "WRANGLER_LOG_PATH=.wrangler/logs WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --outdir dist",
     "db:local": "WRANGLER_LOG_PATH=.wrangler/logs wrangler d1 migrations apply openai-web-mcp --local",
     "deploy": "wrangler deploy",

@@ -17,6 +17,9 @@
     "SEARCH_COUNTRY": "IN",
     "SEARCH_CITY": "",
     "SEARCH_TIMEZONE": "Asia/Kolkata",
+    // chatgpt.com blocks Cloudflare Workers' egress IPs (findings §12), so alpha/search goes through
+    // the stateless Render relay (findings §14). RELAY_SECRET is a Worker secret (>= 32 chars).
+    "RELAY_URL": "https://openai-web-relay.onrender.com",
     // Optional comma-separated hostnames never returned by web_search.
     "BLOCKED_DOMAINS": "",
   },

@@ -15,6 +15,12 @@ export interface Env {
   SEARCH_TIMEZONE?: string;
   /** Comma-separated hostnames always excluded from search (filters.blocked_domains). */
   BLOCKED_DOMAINS?: string;
+  /**
+   * Egress relay for the alpha/search POST (chatgpt.com blocks Cloudflare Workers' IPs).
+   * Set both (RELAY_SECRET as a Worker secret). Unset = call chatgpt.com directly.
+   */
+  RELAY_URL?: string;
+  RELAY_SECRET?: string;
   /** Test-only override for chatgpt.com/backend-api/codex. */
   CODEX_BASE_URL?: string;
   /** Test-only override for https://auth.openai.com. */

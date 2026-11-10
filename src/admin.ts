@@ -2,7 +2,7 @@
 // Auth: HTTP Basic, user "owner", password = OWNER_PASSPHRASE (rate-limited per IP per hour).
 import { countAttempt, equalSecret, escape, ownerConfigured, peekAttempts } from "./auth";
 import { DEFAULT_CODEX_BASE, isChallenge } from "./codex";
-import { rehydrate, WebService } from "./service";
+import { rehydrate, relayConfig, WebService } from "./service";
 import { ToolError, type Env } from "./types";
 import { vault, type VaultStatus } from "./vault";
 
@@ -70,7 +70,8 @@ async function checkOwner(request: Request, env: Env): Promise<Response | null> 
  * bot management challenged the Worker. `?live=1` also runs one real search with the stored login.
  */
 async function reachability(request: Request, env: Env) {
-  const base = (env.CODEX_BASE_URL || DEFAULT_CODEX_BASE).replace(/\/+$/, "");
+  const relay = relayConfig(env);
+  const base = (relay?.url || env.CODEX_BASE_URL || DEFAULT_CODEX_BASE).replace(/\/+$/, "");
   const probe = async (name: string, url: string, init: RequestInit) => {
     const started = Date.now();
     try {
@@ -90,9 +91,14 @@ async function reachability(request: Request, env: Env) {
     }
   };
   const checks = [
-    await probe("alpha_search_unauthenticated", `${base}/alpha/search`, {
+    await probe(relay ? "alpha_search_via_relay_unauthenticated" : "alpha_search_unauthenticated", `${base}/alpha/search`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", originator: "openai-web-mcp", "User-Agent": "openai-web-mcp/0.1.0" },
+      headers: {
+        "Content-Type": "application/json",
+        originator: "openai-web-mcp",
+        "User-Agent": "openai-web-mcp/0.1.0",
+        ...(relay ? { "X-Relay-Secret": relay.secret } : {}),
+      },
       body: JSON.stringify({ id: crypto.randomUUID(), model: "gpt-5.4-mini", commands: { search_query: [{ q: "ping" }] } }),
     }),
     await probe("auth_openid_configuration", "https://auth.openai.com/.well-known/openid-configuration", { method: "GET" }),

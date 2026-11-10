@@ -135,6 +135,7 @@ export class WebService {
         settings,
         model: this.env.CODEX_MODEL || "gpt-5.4-mini",
         base: this.env.CODEX_BASE_URL,
+        relay: relayConfig(this.env),
         fetcher: this.fetcher,
       });
     try {
@@ -213,6 +214,14 @@ export class WebService {
       text: lines.slice(start, end).join("\n"),
     };
   }
+}
+
+export function relayConfig(env: Env) {
+  const url = (env.RELAY_URL ?? "").trim();
+  if (!url) return undefined;
+  if (!env.RELAY_SECRET || env.RELAY_SECRET.length < 32)
+    throw new ToolError("RELAY_MISCONFIGURED", "RELAY_URL is set but RELAY_SECRET is missing or shorter than 32 characters.");
+  return { url, secret: env.RELAY_SECRET };
 }
 
 export function rehydrate(error: unknown) {

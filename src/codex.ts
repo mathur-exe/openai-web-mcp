@@ -71,17 +71,21 @@ export async function alphaSearch(
     /** Merged over the defaults below; see findings §10/§11 for which fields matter. */
     settings?: Record<string, unknown>;
     base?: string;
+    /** Send the call through the egress relay instead of straight to chatgpt.com. */
+    relay?: { url: string; secret: string };
     fetcher?: typeof fetch;
   },
 ): Promise<RawResponse> {
-  const base = (opts.base || DEFAULT_CODEX_BASE).replace(/\/+$/, "");
+  const base = (opts.relay?.url || opts.base || DEFAULT_CODEX_BASE).replace(/\/+$/, "");
+  const headers = codexHeaders(cred);
+  if (opts.relay) headers["X-Relay-Secret"] = opts.relay.secret;
   let response: Response;
   try {
     response = await (opts.fetcher ?? fetch)(`${base}/alpha/search`, {
       method: "POST",
       redirect: "manual",
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      headers: codexHeaders(cred),
+      headers,
       body: JSON.stringify({
         id: opts.sessionId,
         model: opts.model,
@@ -98,6 +102,8 @@ export async function alphaSearch(
     );
   }
   const text = await response.text();
+  if (opts.relay && response.status === 403 && /relay_forbidden/.test(text))
+    throw new ToolError("RELAY_MISCONFIGURED", "The egress relay rejected RELAY_SECRET; the Worker and relay secrets differ.");
   if (response.status === 401) throw new ToolError("UPSTREAM_UNAUTHORIZED", "ChatGPT rejected the access token.");
   if (response.status === 429) {
     const retry = Number(response.headers.get("Retry-After")) || undefined;

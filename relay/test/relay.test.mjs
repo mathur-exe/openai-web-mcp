@@ -39,8 +39,8 @@ test("forwards only the allowed headers and body, returns upstream status", asyn
 test("rejects missing/wrong secret, other paths, and oversized bodies without calling upstream", async () => {
   let calls = 0;
   await withRelay(async () => { calls++; return new Response("{}"); }, async (base) => {
-    assert.equal((await fetch(`${base}/alpha/search`, { method: "POST", body: "{}" })).status, 401);
-    assert.equal((await fetch(`${base}/alpha/search`, { method: "POST", headers: { "x-relay-secret": "wrong" }, body: "{}" })).status, 401);
+    assert.equal((await fetch(`${base}/alpha/search`, { method: "POST", body: "{}" })).status, 403);
+    assert.equal((await fetch(`${base}/alpha/search`, { method: "POST", headers: { "x-relay-secret": "wrong" }, body: "{}" })).status, 403);
     assert.equal((await fetch(`${base}/anything-else`, { method: "POST", headers: { "x-relay-secret": SECRET } })).status, 404);
     assert.equal((await fetch(`${base}/alpha/search`, { method: "POST", headers: { "x-relay-secret": SECRET }, body: "x".repeat(70_000) })).status, 413);
     assert.equal(calls, 0);

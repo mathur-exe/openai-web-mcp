@@ -21,6 +21,8 @@ const state = {
   refresh: "r1",
   refreshCalls: 0,
   revokeNext: false,
+  rejectRelay: false,
+  directCalls: 0,
   approved: false,
   usercodeCalls: 0,
   refreshFail: null as null | { status: number; body: string },
@@ -56,7 +58,14 @@ async function fakeUpstream(request: Request): Promise<Response> {
     }
     if (url.pathname === "/.well-known/openid-configuration") return Response.json({ issuer: "https://auth.openai.com" });
   }
-  if (url.hostname === "chatgpt.com" && url.pathname === "/backend-api/codex/alpha/search") {
+  // chatgpt.com is blocked for Workers; search must go through the relay, which checks the shared secret.
+  if (url.hostname === "chatgpt.com") {
+    state.directCalls++;
+    return new Response("<html>Unable to load site</html>", { status: 403, headers: { "content-type": "text/html" } });
+  }
+  if (url.hostname === "relay.example" && url.pathname === "/alpha/search") {
+    if (state.rejectRelay || request.headers.get("X-Relay-Secret") !== "relay-secret-for-tests-0123456789abcdef")
+      return Response.json({ error: "relay_forbidden" }, { status: 403 });
     const auth = request.headers.get("Authorization") ?? "";
     const body = (await request.json()) as Record<string, any>;
     if (!auth) return Response.json({ detail: "Unauthorized" }, { status: 401 });
@@ -118,7 +127,7 @@ beforeAll(async () => {
       d1Databases: ["DB"],
       durableObjects: { VAULT: { className: "TokenVault", useSQLite: true } },
       outboundService: fakeUpstream,
-      bindings: { PUBLIC_ORIGIN: origin, OWNER_PASSPHRASE: passphrase, DAILY_LIMIT: "30", BLOCKED_DOMAINS: "pinterest.com", CODEX_MODEL: "gpt-5.4-mini" },
+      bindings: { PUBLIC_ORIGIN: origin, OWNER_PASSPHRASE: passphrase, DAILY_LIMIT: "30", BLOCKED_DOMAINS: "pinterest.com", RELAY_URL: "https://relay.example", RELAY_SECRET: "relay-secret-for-tests-0123456789abcdef", CODEX_MODEL: "gpt-5.4-mini" },
     }),
   );
   const db = await worker.getD1Database("DB");
@@ -332,6 +341,20 @@ it("admin forced re-login keeps the old tokens serving until the new login compl
   expect(status).toMatchObject({ state: "signed_in", pending_login: null }); // completed by the DO alarm
 });
 
+it("sends alpha/search only through the relay, and reports a wrong relay secret clearly", async () => {
+  const token = await mcpToken();
+  const before = state.directCalls;
+  expect((await call(token, "web_search", { query: "via relay" })).isError).toBe(false);
+  expect(state.directCalls).toBe(before); // never contacted chatgpt.com directly
+  const refreshesBefore = state.refreshCalls;
+  state.rejectRelay = true;
+  const bad = await call(token, "web_search", { query: "bad secret" });
+  state.rejectRelay = false;
+  expect(bad).toMatchObject({ isError: true, data: { code: "RELAY_MISCONFIGURED" } });
+  // A relay auth failure must not be mistaken for ChatGPT rejecting the token (no forced refresh).
+  expect(state.refreshCalls).toBe(refreshesBefore);
+});
+
 it("enforces the daily limit and reports usage", async () => {
   const token = await mcpToken();
   let last: { isError: boolean; data: any } = { isError: false, data: {} };
@@ -345,6 +368,6 @@ it("enforces the daily limit and reports usage", async () => {
 it("reachability reports JSON 401 from the origin as reachable", async () => {
   const res = await worker.dispatchFetch(`${origin}/admin/reachability`, { headers: admin });
   const body = (await res.json()) as { checks: { name: string; status: number; challenged: boolean }[] };
-  expect(body.checks[0]).toMatchObject({ name: "alpha_search_unauthenticated", status: 401, challenged: false });
+  expect(body.checks[0]).toMatchObject({ name: "alpha_search_via_relay_unauthenticated", status: 401, challenged: false });
   expect(body.checks[1]).toMatchObject({ name: "auth_openid_configuration", status: 200 });
 });

@@ -64,7 +64,8 @@ export function createServer(env = process.env, fetchImpl = fetch) {
         });
       }
       if (req.method === "POST" && url.pathname === "/alpha/search") {
-        if (!secretOk(req.headers["x-relay-secret"], secret)) return send(res, 401, { error: "unauthorized" });
+        // 403 (not 401): the caller must be able to tell a relay auth failure from ChatGPT rejecting its token.
+        if (!secretOk(req.headers["x-relay-secret"], secret)) return send(res, 403, { error: "relay_forbidden" });
         const body = await readBody(req);
         const headers = {};
         for (const name of FORWARD_HEADERS) if (req.headers[name]) headers[name] = String(req.headers[name]);
