@@ -21,6 +21,9 @@ export interface Env {
    */
   RELAY_URL?: string;
   RELAY_SECRET?: string;
+  /** Tunables (defaults 8000 ms / 600 s): how long /health may take before the relay counts as asleep, and how long "awake" is trusted. */
+  RELAY_HEALTH_TIMEOUT_MS?: string;
+  RELAY_WARM_TTL_S?: string;
   /** Test-only override for chatgpt.com/backend-api/codex. */
   CODEX_BASE_URL?: string;
   /** Test-only override for https://auth.openai.com. */

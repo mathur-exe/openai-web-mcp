@@ -2,7 +2,8 @@
 // Auth: HTTP Basic, user "owner", password = OWNER_PASSPHRASE (rate-limited per IP per hour).
 import { countAttempt, equalSecret, escape, ownerConfigured, peekAttempts } from "./auth";
 import { DEFAULT_CODEX_BASE, isChallenge } from "./codex";
-import { rehydrate, relayConfig, WebService } from "./service";
+import { relayConfig } from "./relay";
+import { rehydrate, WebService } from "./service";
 import { ToolError, type Env } from "./types";
 import { vault, type VaultStatus } from "./vault";
 

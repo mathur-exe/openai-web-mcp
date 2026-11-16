@@ -3,6 +3,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { handleAdmin } from "./admin";
 import { authorize, type AuthEnv } from "./auth";
 import { createServer } from "./mcp";
+import { prewarmRelay } from "./relay";
 import type { Env } from "./types";
 import { vault } from "./vault";
 
@@ -15,7 +16,9 @@ function createProvider(origin: string) {
       async fetch(request, env, ctx) {
         const { auth } = ctx as OAuthResourceContext<{ userId: string }>;
         if (!auth.scope.includes("mcp:read")) return new Response("Missing mcp:read scope", { status: 403 });
-        return createMcpHandler(() => createServer(env))(request, env, ctx);
+        // Wake the free-tier relay as soon as a client connects, before the first search needs it.
+        prewarmRelay(env, ctx);
+        return createMcpHandler(() => createServer(env, ctx))(request, env, ctx);
       },
     },
     defaultHandler: {

@@ -22,6 +22,8 @@ const state = {
   refreshCalls: 0,
   revokeNext: false,
   rejectRelay: false,
+  relayAsleep: false,
+  healthCalls: 0,
   directCalls: 0,
   approved: false,
   usercodeCalls: 0,
@@ -62,6 +64,14 @@ async function fakeUpstream(request: Request): Promise<Response> {
   if (url.hostname === "chatgpt.com") {
     state.directCalls++;
     return new Response("<html>Unable to load site</html>", { status: 403, headers: { "content-type": "text/html" } });
+  }
+  if (url.hostname === "relay.example" && url.pathname === "/health") {
+    state.healthCalls++;
+    if (state.relayAsleep) {
+      state.relayAsleep = false; // the request itself starts the wake-up...
+      await new Promise((r) => setTimeout(r, 900)); // ...but this answer comes too late for the health check
+    }
+    return Response.json({ status: "ok" });
   }
   if (url.hostname === "relay.example" && url.pathname === "/alpha/search") {
     if (state.rejectRelay || request.headers.get("X-Relay-Secret") !== "relay-secret-for-tests-0123456789abcdef")
@@ -127,7 +137,7 @@ beforeAll(async () => {
       d1Databases: ["DB"],
       durableObjects: { VAULT: { className: "TokenVault", useSQLite: true } },
       outboundService: fakeUpstream,
-      bindings: { PUBLIC_ORIGIN: origin, OWNER_PASSPHRASE: passphrase, DAILY_LIMIT: "30", BLOCKED_DOMAINS: "pinterest.com", RELAY_URL: "https://relay.example", RELAY_SECRET: "relay-secret-for-tests-0123456789abcdef", CODEX_MODEL: "gpt-5.4-mini" },
+      bindings: { PUBLIC_ORIGIN: origin, OWNER_PASSPHRASE: passphrase, DAILY_LIMIT: "30", BLOCKED_DOMAINS: "pinterest.com", RELAY_URL: "https://relay.example", RELAY_HEALTH_TIMEOUT_MS: "300", RELAY_WARM_TTL_S: "0", RELAY_SECRET: "relay-secret-for-tests-0123456789abcdef", CODEX_MODEL: "gpt-5.4-mini" },
     }),
   );
   const db = await worker.getD1Database("DB");
@@ -138,7 +148,12 @@ afterAll(async () => {
   await worker?.dispose();
 });
 
+// One OAuth grant for the whole file: the consent page allows only 10 attempts per IP per hour.
+let cachedToken: string | undefined;
 async function mcpToken() {
+  return (cachedToken ??= await createMcpToken());
+}
+async function createMcpToken() {
   const registration = await worker.dispatchFetch(`${origin}/oauth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -353,6 +368,43 @@ it("sends alpha/search only through the relay, and reports a wrong relay secret 
   expect(bad).toMatchObject({ isError: true, data: { code: "RELAY_MISCONFIGURED" } });
   // A relay auth failure must not be mistaken for ChatGPT rejecting the token (no forced refresh).
   expect(state.refreshCalls).toBe(refreshesBefore);
+});
+
+it("fails fast with RELAY_WARMING when the relay is asleep, without touching the quota", async () => {
+  const token = await mcpToken();
+  const usageBefore = (await call(token, "web_status", {})).data.usage;
+  const searchesBefore = state.searchCalls.length;
+  state.relayAsleep = true;
+  const started = Date.now();
+  const warming = await call(token, "web_search", { query: "while asleep" });
+  expect(Date.now() - started).toBeLessThan(5000); // not the 60 s a real cold start would take
+  expect(warming).toMatchObject({ isError: true, data: { code: "RELAY_WARMING", retry_after_seconds: 30 } });
+  expect(warming.data.message).toContain("retry this same call once");
+  expect(state.searchCalls.length).toBe(searchesBefore); // nothing was sent upstream
+  expect((await call(token, "web_status", {})).data.usage.search).toBe(usageBefore.search); // quota untouched
+  // The wake-up has started, so the retry works.
+  const retried = await call(token, "web_search", { query: "after waking" });
+  expect(retried.isError).toBe(false);
+  expect(retried.data.count).toBeGreaterThan(0);
+});
+
+it("keeps web_fetch working through a direct fetch while the relay wakes", async () => {
+  const token = await mcpToken();
+  state.relayAsleep = true;
+  const page = await call(token, "web_fetch", { url: "https://broken.example/" });
+  expect(page.isError).toBe(false);
+  expect(page.data).toMatchObject({ source: "direct", title: "Broken & fixed" });
+  expect(page.data.note).toContain("waking up");
+  expect(page.data.note).not.toContain("retry this same call"); // agent-facing retry text stays out of fetch notes
+});
+
+it("web_status reports the relay state and starts the wake-up", async () => {
+  const token = await mcpToken();
+  state.relayAsleep = true;
+  const waking = (await call(token, "web_status", {})).data;
+  expect(waking.relay.state).toBe("waking");
+  expect(waking.relay.note).toContain("Waking");
+  expect((await call(token, "web_status", {})).data.relay.state).toBe("warm");
 });
 
 it("enforces the daily limit and reports usage", async () => {

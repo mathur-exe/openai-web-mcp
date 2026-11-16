@@ -11,6 +11,7 @@ import {
 } from "./codex";
 import { ToolError, type Env } from "./types";
 import { assertPublicUrl } from "./url";
+import { ensureRelayAwake, markRelayCold, markRelayWarm, relayConfig } from "./relay";
 
 export { assertPublicUrl };
 import { vault } from "./vault";
@@ -44,6 +45,7 @@ export class WebService {
     private env: Env,
     // Wrapped: storing the global `fetch` and calling it as a method throws "Illegal invocation".
     private fetcher: typeof fetch = (input, init) => fetch(input, init),
+    private ctx?: ExecutionContext,
   ) {}
 
   async search(input: SearchInput) {
@@ -100,7 +102,7 @@ export class WebService {
     } catch (error) {
       // Only the daily cap is fatal; any upstream failure degrades to a direct fetch.
       if (!(error instanceof ToolError) || error.code === "DAILY_LIMIT") throw error;
-      upstreamError = error.message;
+      upstreamError = error.code === "RELAY_WARMING" ? "the search relay is waking up from its free-tier sleep (30-60 s)" : error.message;
     }
     const direct = await this.directFetch(url, input);
     return { ...direct, source: "direct", note: `Fetched directly because: ${upstreamError}` };
@@ -125,6 +127,8 @@ export class WebService {
     sessionId: string,
     settings?: Record<string, unknown>,
   ): Promise<RawResponse> {
+    // Fail fast (before counting against the daily limit) if the free-tier relay is asleep.
+    await ensureRelayAwake(this.env, this.ctx, this.fetcher);
     await this.count(kind);
     const box = vault(this.env);
     const call = (cred: Credential) =>
@@ -140,8 +144,12 @@ export class WebService {
       });
     try {
       try {
-        return await call(await box.credential());
+        const raw = await call(await box.credential());
+        markRelayWarm(this.env);
+        return raw;
       } catch (error) {
+        // Could not talk to the relay at all: forget that it was awake so the next call re-checks.
+        if (error instanceof ToolError && ["UPSTREAM_ERROR", "UPSTREAM_TIMEOUT"].includes(error.code)) markRelayCold();
         // Mid-window revocation or rotation: force one refresh and retry once (same as Hermes' xAI path).
         if (error instanceof ToolError && error.code === "UPSTREAM_UNAUTHORIZED") return await call(await box.credential(true));
         throw error;
@@ -214,14 +222,6 @@ export class WebService {
       text: lines.slice(start, end).join("\n"),
     };
   }
-}
-
-export function relayConfig(env: Env) {
-  const url = (env.RELAY_URL ?? "").trim();
-  if (!url) return undefined;
-  if (!env.RELAY_SECRET || env.RELAY_SECRET.length < 32)
-    throw new ToolError("RELAY_MISCONFIGURED", "RELAY_URL is set but RELAY_SECRET is missing or shorter than 32 characters.");
-  return { url, secret: env.RELAY_SECRET };
 }
 
 export function rehydrate(error: unknown) {
