@@ -7,13 +7,14 @@ A remote MCP server on Cloudflare Workers that gives Claude (or any MCP client) 
 | `web_search(query, limit=8, domains?, recency_days?, extra_queries?)` | WebSearch | `search_query` |
 | `web_fetch(url, line?, find?, max_tokens=6000)` | WebFetch | `open` / `find`. Falls back to a direct fetch + HTML→text when upstream can't open the page |
 | `chatgpt_login(force=false)` | — | Kite-style sign-in: returns a link + one-time code; call again to confirm |
-| `web_status()` | — | login state + today's usage |
+| `web_status()` | — | login state, relay state (awake / waking), today's usage |
 
 ```
 src/index.ts    OAuth provider (/authorize, /oauth/*), /mcp, /admin, /health, cron
 src/auth.ts     owner-passphrase consent (from the YouTube Research worker), per-kind login rate limits
 src/vault.ts    TokenVault Durable Object: own device-code login, single-flight refresh, cron keep-fresh
 src/codex.ts    alpha/search client + output cleanup (cite markers, 【n†link】, Lnn: lines, paging)
+src/relay.ts    free-tier relay handling: /health check, RELAY_WARMING fail-fast, background wake-up, pre-warm
 src/service.ts  search/fetch orchestration, daily cap, 401→refresh→retry once, direct-fetch fallback
 src/url.ts      SSRF guard for user-supplied URLs
 src/admin.ts    owner pages: ChatGPT sign-in, status, /admin/reachability
@@ -41,6 +42,16 @@ stateDiagram-v2
 - **Transient refresh errors** (5xx, other 400s) keep the login and are retried on the next call, matching Codex.
 - **Proactive refresh:** the daily cron refreshes when under 2 days remain or the last refresh is 8+ days old (Codex's `TOKEN_REFRESH_INTERVAL`), so an unused server doesn't let the grant go stale.
 - You only find out about an expiry when a tool is called or you open `/admin`. There is no push alert yet.
+
+## The relay's cold start (Render free plan)
+
+Render spins a free service down after 15 minutes without traffic, and waking it takes about a minute (Render docs; measured 26 s). A tool call that waits that long can time out in the client, so the Worker never waits for it:
+
+- **Fail fast:** before each search the Worker asks the relay's `/health` (about 100 ms when awake; an awake answer is trusted for 10 minutes). If it doesn't answer within 8 s, the Worker starts the wake-up in the background and returns `RELAY_WARMING` with `retry_after_seconds: 30`. Nothing is counted against `DAILY_LIMIT`.
+- **Agent instructions:** the server instructions and the `web_search` description tell the agent to tell the user, wait about 30 s and retry that one call once, without loops or parallel retries.
+- **`web_fetch` keeps working:** while the relay wakes it falls back to a direct fetch, with a note saying so.
+- **Pre-warm:** any authenticated `/mcp` request (connecting, listing tools, `web_status`) wakes a sleeping relay in the background, so it is usually awake before the first search. `web_status` also reports `relay.state` (`warm` / `waking`).
+- No keep-alive pinging: that would burn the workspace's 750 free Render instance hours, which ValuePickr and google-health also use.
 
 ## Security model
 
@@ -119,6 +130,9 @@ The integration tests run the built Worker in miniflare against a fake OpenAI (d
 | `SEARCH_COUNTRY` / `SEARCH_CITY` / `SEARCH_TIMEZONE` | ISO-3166 alpha-2 / city / IANA tz; unset = global | `IN` / — / `Asia/Kolkata` (owner's choice, 2026-11-10) | **Big effect:** "filter coffee near me" went from global blogs to Bengaluru cafés and Swiggy. |
 | `BLOCKED_DOMAINS` | comma list, ≤ 100 hosts | unset | Always-excluded sites (`filters.blocked_domains`, verified). |
 | cron | cron expr | `17 3 * * *` (daily) | Token keep-fresh + table cleanup. |
+| `RELAY_URL` / `RELAY_SECRET` | URL / secret ≥ 32 chars | Render relay / Worker secret | Unset `RELAY_URL` = call chatgpt.com directly (blocked from Workers, so only for other networks). |
+| `RELAY_HEALTH_TIMEOUT_MS` | ≥ 0 ms | 8000 | How long `/health` may take before the relay counts as asleep. Render answers in ~100 ms when awake. |
+| `RELAY_WARM_TTL_S` | ≥ 0 s | 600 | How long an awake answer is trusted. Render sleeps after 900 s idle, so 600 leaves margin. |
 
 **Tool parameters** (Claude sets per call)
 
@@ -159,6 +173,7 @@ The integration tests run the built Worker in miniflare against a fake OpenAI (d
 | Keep-fresh margin | 2 days | The cron refreshes early, so a daily run never misses expiry. |
 | Login code window | 15 min | Hermes waits 15 min for device approval. |
 | Poll interval | max(3 s, server `interval`) | Hermes floor. |
+| Wake-up request | up to 70 s | Background request that wakes the relay (Render documents ~60 s). |
 | Upstream timeout | 60 s | Hermes `_TIMEOUT`. Live calls took 2.4–5.5 s. |
 | Fallback fetch | 20 s, 4 redirects, 3 MB, HTML/text only | Bounded Worker CPU and memory. |
 | Login attempt limits | consent 10/h/IP; admin failures 20/h/IP | Brute-force protection. |

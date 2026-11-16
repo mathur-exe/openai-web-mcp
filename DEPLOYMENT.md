@@ -43,4 +43,5 @@ No paid plan was enabled on Cloudflare or Render.
 
 - Render free instances sleep when idle; the first search after a quiet period can take 30–60 s. The Worker's upstream timeout is 60 s.
 - If the relay secret differs between Worker and Render, tools return `RELAY_MISCONFIGURED`.
+- Cold start: the Worker checks the relay's `/health` first. If the relay is asleep, `web_search` returns `RELAY_WARMING` (retry in ~30 s, nothing counted against the daily limit), `web_fetch` falls back to a direct fetch, and the wake-up runs in the background. Any authenticated `/mcp` request pre-warms it. No keep-alive pings (they would use the shared 750 free Render hours).
 - Rotate the relay secret by writing a new value to `.wrangler/relay-secret.txt`, then `wrangler secret put RELAY_SECRET < .wrangler/relay-secret.txt` and update the Render env var.
